@@ -1,28 +1,11 @@
-FROM ubuntu:22.04
+FROM node:20-alpine
 
-ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    unzip \
-    npm \
-    ca-certificates \
-    awscli \
-    bash \
-    jq \
-    && apt-get clean
+COPY package.json package-lock.json ./
 
-# Install Nixpacks
-RUN curl -sSL https://nixpacks.com/install.sh | bash
+RUN npm install --production
 
-# Download and install Kaniko executor
-RUN mkdir -p /kaniko && \
-    curl -L -o /kaniko/executor https://github.com/GoogleContainerTools/kaniko/releases/download/v1.23.2/executor-linux-amd64 && \
-    chmod +x /kaniko/executor
+COPY script.js ./
 
-# Add entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["node", "script.js"]
