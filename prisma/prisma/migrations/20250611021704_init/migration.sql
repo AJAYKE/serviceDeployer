@@ -4,8 +4,11 @@ CREATE TYPE "deploymentStatus" AS ENUM ('PENDING', 'SUCCESS', 'FAILED');
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
-    "name" TEXT,
+    "username" TEXT,
     "email" TEXT,
+    "avatar" TEXT,
+    "githubId" TEXT,
+    "githubAccessToken" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -15,6 +18,7 @@ CREATE TABLE "User" (
 -- CreateTable
 CREATE TABLE "Projects" (
     "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
     "repo" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -36,6 +40,9 @@ CREATE TABLE "Deployment" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_githubId_key" ON "User"("githubId");
 
 -- AddForeignKey
 ALTER TABLE "Projects" ADD CONSTRAINT "Projects_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

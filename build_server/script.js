@@ -5,6 +5,7 @@ const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const mime = require("mime-types");
 require("dotenv").config();
 const rabbitmq = require("amqplib");
+const { PrismaClient } = require("../generated/prisma");
 
 const s3Client = new S3Client({
   region: "ap-south-1",
@@ -13,6 +14,8 @@ const s3Client = new S3Client({
     secretAccessKey: process.env.aws_secret_access_key,
   },
 });
+
+const prisma = new PrismaClient();
 
 const BUCKET_NAME = process.env.BUCKET_NAME || "my-vercel-bucket";
 
@@ -47,7 +50,7 @@ const uploadFileWithRetry = async (itemPath, s3Key, maxRetries = 3) => {
 
       const command = new PutObjectCommand({
         Bucket: BUCKET_NAME,
-        Key: `__outputs/${PROJECT_ID}/${s3Key}`,
+        Key: `__outputs/${PROJECT_ID}/${s3Key}`, // PROJECT_ID is actually deploymentId now
         Body: fileContent,
         ContentType: mime.lookup(itemPath) || "application/octet-stream",
       });
@@ -128,11 +131,16 @@ const execPromise = (command, options = {}) => {
   });
 };
 
+// Global variables for git repo info and deployment ID
+let GIT_REPOSITORY_URL, SERVICE_PATH, DEPLOYMENT_ID;
+
 async function init() {
   console.log("Executing script.js");
 
   const outDirPath = path.join(__dirname, "output");
   await cleanup(outDirPath);
+
+  let deploymentStatus = "FAILED"; // Default status
 
   try {
     const cloneCommand = `git clone ${GIT_REPOSITORY_URL} ${outDirPath}`;
@@ -143,14 +151,22 @@ async function init() {
     const servicePathFull = path.join(outDirPath, SERVICE_PATH);
     if (!fs.existsSync(servicePathFull)) {
       console.error(`Service path not found: ${servicePathFull}`);
-      await cleanup(outDirPath);
       return;
     }
 
     await buildProject(outDirPath);
-    await cleanup(outDirPath);
+    deploymentStatus = "SUCCESS";
   } catch (error) {
-    console.error(`Error cloning repository: ${error.error?.message || error}`);
+    console.error(`Error during deployment: ${error.error?.message || error}`);
+    deploymentStatus = "FAILED";
+  } finally {
+    await prisma.deployment.update({
+      where: { id: DEPLOYMENT_ID },
+      data: { status: deploymentStatus },
+    });
+    console.log(
+      `Deployment ${DEPLOYMENT_ID} status updated to ${deploymentStatus}`
+    );
     await cleanup(outDirPath);
   }
 }
@@ -169,7 +185,7 @@ async function buildProject(outDirPath) {
     } else if (fs.existsSync(path.join(servicePath, "pnpm-lock.yaml"))) {
       buildCommand =
         "corepack enable pnpm && pnpm i --frozen-lockfile && pnpm run build";
-    } else if (fs.existsSync(path.join(servicePath, "bun.lockb"))) {
+    } else if (fs.existsSync(path.join(servicePath, "bun.lock"))) {
       buildCommand = "bun install --no-save && bun run build";
     } else {
       throw new Error("No lockfile found");
@@ -206,7 +222,6 @@ async function buildProject(outDirPath) {
           console.log(exportStdout);
         } catch (exportError) {
           console.log("Export command failed, continuing with build output...");
-          console.log(exportError.stderr);
         }
       }
     }
@@ -226,22 +241,14 @@ async function buildProject(outDirPath) {
     console.log("Upload complete.");
   } catch (error) {
     console.error(
-      `Build error: ${error.error?.message || error.message || error}`
+      `Build error: ${error?.error?.message || error?.message || error}`
     );
-    if (error.stderr) {
-      console.error("stderr:", error.stderr);
-    }
-    if (error.stdout) {
-      console.log("stdout:", error.stdout);
-    }
+    throw error; // Re-throw to be caught by init's try/catch
   }
 }
 
 const amqpUrl = `amqp://${process.env.AMQP_USER}:${process.env.AMQP_PASSWORD}@${process.env.AMQP_HOST}`;
 const queueName = process.env.AMQP_QUEUE;
-
-// Global variables for git repo info
-let GIT_REPOSITORY_URL, SERVICE_PATH, PROJECT_ID;
 
 async function connect() {
   try {
@@ -251,13 +258,13 @@ async function connect() {
 
     channel.consume(queueName, async (msg) => {
       if (msg !== null) {
-        const [gitRepoUrl, servicePath, projectId] = msg.content
+        const [gitRepoUrl, servicePath, deploymentId] = msg.content
           .toString()
           .split(",");
-        console.log("Received message:", gitRepoUrl, servicePath, projectId);
+        console.log("Received message:", gitRepoUrl, servicePath, deploymentId);
         GIT_REPOSITORY_URL = `https://github.com/${gitRepoUrl}`;
         SERVICE_PATH = servicePath;
-        PROJECT_ID = projectId;
+        DEPLOYMENT_ID = deploymentId; // Assign to DEPLOYMENT_ID
         await init();
         channel.ack(msg);
       }

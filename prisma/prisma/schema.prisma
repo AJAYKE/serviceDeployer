@@ -6,7 +6,7 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
+  output   = "../../generated/prisma"
 }
 
 datasource db {
@@ -15,20 +15,22 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  username      String?
-  email     String?  @unique
-  avatar    String?
-  githubId String?  @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String    @id @default(cuid())
+  username          String?
+  email             String?   @unique
+  avatar            String?
+  githubId          String?   @unique
+  githubAccessToken String?   // New field to store GitHub access token
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   Projects Projects[]
 }
 
 model Projects {
   id        String   @id @default(cuid())
-  repo String
+  name      String   // New field for project name
+  repo      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userId    String
@@ -38,11 +40,11 @@ model Projects {
 }
 
 model Deployment {
-  id        String   @id @default(cuid())
+  id        String           @id @default(cuid())
   projectId String
   status    deploymentStatus
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
   project Projects @relation(fields: [projectId], references: [id])
 }

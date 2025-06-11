@@ -15,7 +15,7 @@ export default function OAuthCallback() {
     } else {
       router.push("/signin");
     }
-  }, []);
+  }, [router]);
 
   return <p>Logging in with GitHub...</p>;
 }
